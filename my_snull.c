@@ -45,7 +45,9 @@ struct net_device *snull_devs[2];
 int pool_size = 8;						// pool size for packets per dev
 module_param(pool_size, int, 0);
 
-static void (*snull_interrupt)(int, void *, struct pt_regs *);
+// ---------------------------Last change-------------------------
+// static void (*snull_interrupt)(int, void *, struct pt_regs *);
+// ---------------------------------------------------------------
 
 /*
  * A structure representing an in-flight packet.
@@ -67,10 +69,11 @@ struct snull_priv {
 	struct net_device_stats stats;		// the standard place to hold interface statistics
 	/* We can see some data of stats in ifconfig */
 	int status;
+	// Below two lists are used to create (give a feel of) a ring buffer
 	struct snull_packet *ppool;			// Packet pool, List of outgoing packets
 	struct snull_packet *rx_queue;  /* List of incoming packets */
-	int rx_int_enabled;
-	int tx_packetlen;
+	int rx_int_enabled;					// Receive interrupt enable
+	int tx_packetlen;					// Length of packet to be transmitted
 	u8 *tx_packetdata;
 	struct sk_buff *skb;
 	spinlock_t lock;
@@ -228,7 +231,12 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 		priv->stats.rx_dropped++;
 		goto out;
 	}
-	skb_reserve(skb, 2); /* align IP on 16B boundary */  
+	skb_reserve(skb, 2); /* align IP on 16B boundary */
+	/* skb_reserve : Increase the headroom of an empty &sk_buff by reducing the tail
+ 	 * room. This is only allowed for an empty buffer.
+ 	 * skb->data += len;
+	 * skb->tail += len;
+ 	 */  
 	memcpy(skb_put(skb, pkt->datalen), pkt->data, pkt->datalen);
 	/* For skb_put(), see /net/core/skbuff.c => void *skb_put(struct sk_buff *skb, unsigned int len) */
 	// It extends the used data area of the buffer by len, and returns the pointer of next to the used data area.
@@ -273,7 +281,8 @@ void snull_release_buffer(struct snull_packet *pkt)
  * <priv->status is odd> maintains the stats, when transmission is done
  * <priv->status is even> receive the packet using snull_rx() 
  */
-static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)		// irq: 0, regs: NULL
+// static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)		// irq: 0, regs: NULL
+static void snull_interrupt(int irq, void *dev_id, struct pt_regs *regs)		// irq: 0, regs: NULL
 {
 	int statusword;
 	struct snull_priv *priv;
@@ -306,7 +315,7 @@ static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		/* send it to snull_rx for handling */
 		pkt = priv->rx_queue;
 		if (pkt) {
-			priv->rx_queue = pkt->next;
+			priv->rx_queue = pkt->next;		// Most of the time pkt->next will be NULL, as generally we are transmitting single packet and receiving single pkt
 			snull_rx(dev, pkt);				// Recieve pkt at dev (generally dest), not upto the socket, but pkt will be wrapped by sk_buff sent towards upper layers.
 			printk(KERN_ALERT "Pkt received");
 		}
@@ -322,6 +331,7 @@ static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Unlock the device and we are done */
 	spin_unlock(&priv->lock);
 	if (pkt) snull_release_buffer(pkt); /* Do this outside the lock! */
+	// Received packet will be moved to ppool, so that it would be reconsidered for transmission
 	return;
 }
 
@@ -593,7 +603,7 @@ static const struct net_device_ops snull_netdev_ops = {
 	// Only dev->irq is set with map->irq
 
 	// Below two are optional methods. (According to LDD3)
-	// .ndo_do_ioctl		= snull_ioctl,				// Performs interface-specific ioctl commands.
+	.ndo_do_ioctl		= snull_ioctl,				// Performs interface-specific ioctl commands.
 	// ndo_do_ioctl called when a user requests an ioctl which can't be handled by the generic interface code.
 	// But the function (ndo_do_ioctl) is doing nothing.
 	
@@ -656,9 +666,8 @@ void snull_init(struct net_device *dev)
 	
 	priv = netdev_priv(dev);
 	memset(priv, 0, sizeof(struct snull_priv));
-	spin_lock_init(&priv->lock);
+	spin_lock_init(&priv->lock);		// Initialize the lock
 	priv->dev = dev;				// Set the dev field, so we would be able to get dev through priv
-	snull_rx_ints(dev, 1);  	/* enable receive interrupts */		// from ldd3
 
    	/* 
 	 * Then, assign other fields in dev, using ether_setup() and some
@@ -746,7 +755,7 @@ int mysnull_init_module(void)
 
 	// We are not using napi
 	// snull_interrupt = use_napi ? snull_napi_interrupt : snull_regular_interrupt;
-	snull_interrupt = snull_regular_interrupt;
+	// snull_interrupt = snull_regular_interrupt;
 
 	/* Allocate the devices */
 	// mynet_devs[0] = alloc_netdev(int sizeof_priv, const char *name, void (*setup)(struct net_device *));
