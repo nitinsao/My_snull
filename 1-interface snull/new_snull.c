@@ -60,20 +60,21 @@ struct snull_priv {
 
 static void snull_rx_ints(struct net_device *dev, int enable)
 {
-	printk(KERN_ALERT "%s called", __FUNCTION__);
 	struct snull_priv *priv = netdev_priv(dev);
 	priv->rx_int_enabled = enable;
+	printk(KERN_ALERT "%s called", __FUNCTION__);
 }
 
 void snull_setup_pool(struct net_device *dev)
 {
-	printk(KERN_ALERT "%s called", __FUNCTION__);
-
 	struct snull_priv *priv = netdev_priv(dev);
 	int i;
 	struct snull_packet *pkt;
 
-	char msg_on_pkt[] = "Hello I am here!\n";
+	printk(KERN_ALERT "%s called", __FUNCTION__);
+
+
+	// char msg_on_pkt[] = "Hello I am here!\n";
 
 	priv->ppool = NULL;					// Initializing packet pool
 	for (i = 0; i < pool_size; i++) {		// Creating pool_size (8) packets and adding it to head of the ppool
@@ -92,26 +93,17 @@ void snull_setup_pool(struct net_device *dev)
 
 int snull_open(struct net_device *dev)		// is called whenever ifconfig activates it.
 {
-
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
 
 	memcpy(dev->dev_addr, "\0SNUL0", ETH_ALEN);		// dev_addr : Interface address info used in eth_type_trans()
 
-	// if (dev == snull_devs[1])
-	// 	dev->dev_addr[ETH_ALEN-1]++; /* \0SNUL1 */
 	netif_start_queue(dev);			// Allow upper layers to call the device hard_start_xmit routine.
 	return 0;
 }
 
 int snull_release(struct net_device *dev)		// should reverse operations performed at open time.
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
 
 	netif_stop_queue(dev); /* can't transmit any more */
 	return 0;
@@ -119,15 +111,12 @@ int snull_release(struct net_device *dev)		// should reverse operations performe
 
 struct snull_packet *snull_get_tx_buffer(struct net_device *dev)
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	struct snull_priv *priv = netdev_priv(dev);
 	unsigned long flags;
 	struct snull_packet *pkt;
     
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
+
 	spin_lock_irqsave(&priv->lock, flags);
 	pkt = priv->ppool;						// outgoing pkt
 	priv->ppool = pkt->next;				// can also be written as : priv->ppool = priv->ppool->next
@@ -141,13 +130,10 @@ struct snull_packet *snull_get_tx_buffer(struct net_device *dev)
 
 void snull_enqueue_buf(struct net_device *dev, struct snull_packet *pkt)
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	unsigned long flags;
 	struct snull_priv *priv = netdev_priv(dev);
+
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
 
 	spin_lock_irqsave(&priv->lock, flags);
 	pkt->next = priv->rx_queue;  /* FIXME - misorders packets */
@@ -157,13 +143,10 @@ void snull_enqueue_buf(struct net_device *dev, struct snull_packet *pkt)
 
 void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	struct sk_buff *skb;
 	struct snull_priv *priv = netdev_priv(dev);
+
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
 
 	skb = dev_alloc_skb(pkt->datalen + 2);
 	if (!skb) {
@@ -177,15 +160,16 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 	
 	{
 		// Printing pkt->data
-		int pkt_chars = 0, pk = 0;
-		// while(pkt_chars < pkt->datalen-1)
+		
+		char *my_data = pkt -> data;
+		int jump = sizeof(struct tcphdr) + sizeof(struct iphdr) + sizeof(struct ethhdr);
+		if(jump < pkt->datalen)
 		{
-			// pkt_chars += printk(KERN_ALERT "%s", pkt->data[pkt_chars]);
-			// printk(KERN_ALERT "%d chars printed, datalen: %d", pkt_chars, pkt->datalen);
-			for(pk = 0; pk < pkt -> datalen; pk++)
-				printk(KERN_ALERT "%c", pkt->data[pk]);
-			
+			printk(KERN_ALERT "Actual: ");
+			my_data = (char *)(pkt->data + jump);
 		}
+		
+		printk(KERN_ALERT "%s: Rx data : %s, len: %d, jump: %d", __FUNCTION__, my_data, pkt->datalen, jump);
 	}
 
 	skb->dev = dev;									// Its new skb, so initializing it
@@ -202,14 +186,11 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 
 void snull_release_buffer(struct snull_packet *pkt)
 {
-	int dev_num = 0;
-	// if(pkt->dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	unsigned long flags;
 	struct snull_priv *priv = netdev_priv(pkt->dev);
 	
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
+
 	spin_lock_irqsave(&priv->lock, flags);
 	pkt->next = priv->ppool;				// Add pkt in the front of the priv->ppool, so it would be considered in next loop
 	priv->ppool = pkt;
@@ -227,10 +208,8 @@ static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	struct net_device *dev = (struct net_device *)dev_id;
 
-
 	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
+
 	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
 
 
@@ -266,11 +245,6 @@ static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static void snull_hw_tx(char *buf, int len, struct net_device *dev)
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d, buf : %s, len : %i", __FUNCTION__, dev_num, buf, len);
-
 	struct iphdr *ih;				// IP header
 	struct net_device *dest;
 	struct snull_priv *priv;
@@ -278,6 +252,8 @@ static void snull_hw_tx(char *buf, int len, struct net_device *dev)
 	__be32	temp_addr;
 	struct snull_packet *tx_buffer;
     
+	printk(KERN_ALERT "%s called by sn0, buf : , len : %i", __FUNCTION__, len);
+
 	if (len < sizeof(struct ethhdr) + sizeof(struct iphdr)) {			// Its less probable
 		printk("snull: Hmm... packet too short (%i octets)\n",
 				len);
@@ -326,7 +302,7 @@ static void snull_hw_tx(char *buf, int len, struct net_device *dev)
 	snull_enqueue_buf(dest, tx_buffer);					// enqueue tx_buffer in the front of list of incoming pkt of dest. 
 
 	if (priv->rx_int_enabled) {
-		printk(KERN_ALERT "Receive Interrupt Enabled in function %s by dest :sn%d", __FUNCTION__, dev_num);
+		// printk(KERN_ALERT "Receive Interrupt Enabled in function %s by dest :sn0", __FUNCTION__);
 		priv->status |= SNULL_RX_INTR;				// See snull.h, SNULL_RX_INTR = 0x0001
 		snull_interrupt(0, dest, NULL);			// snull_regular_interrupt() will be called, as we are not using napi.
 	}
@@ -346,12 +322,22 @@ int snull_tx(struct sk_buff *skb, struct net_device *dev)		// initiates the tran
 	
 	data = skb->data;		// Data head pointer (unsigned char *data;)
 	len = skb->len;			// Length of actual data (unsigned int len;)
-/*
-	int dev_num = 0;
-	if(dev == snull_devs[1])
-		dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d, data : %s, len : %i < %i", __FUNCTION__, dev_num, data, len, ETH_ZLEN);
-*/
+	
+	/*
+	{
+		char *my_data = data;
+		int jump = sizeof(struct tcphdr) + sizeof(struct iphdr) + sizeof(struct ethhdr);
+		if(jump < len)
+		{
+			my_data = (char *)(data + jump);
+			memcpy(my_data, "Hello World\n", len - jump);
+		}
+		
+		printk(KERN_ALERT "%s: Tx data : %s, len: %d, jump: %d", __FUNCTION__, my_data, len, jump);
+	}
+	*/
+	printk(KERN_ALERT "%s called", __FUNCTION__);
+
 	if (len < ETH_ZLEN) {
 		memset(shortpkt, 0, ETH_ZLEN);
 		memcpy(shortpkt, skb->data, skb->len);
@@ -369,12 +355,9 @@ int snull_tx(struct sk_buff *skb, struct net_device *dev)		// initiates the tran
 
 void snull_tx_timeout (struct net_device *dev)
 {
-/*	int dev_num = 0;
-	if(dev == snull_devs[1])
-		dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-*/
 	struct snull_priv *priv = netdev_priv(dev);
+
+	printk(KERN_ALERT "%s called", __FUNCTION__);
 
 	priv->status = SNULL_TX_INTR;		// status changed to 0x0002
 	snull_interrupt(0, dev, NULL);		// snull_regular_interrupt() will be called, as we are not using napi.
@@ -391,11 +374,8 @@ struct net_device_stats *snull_stats(struct net_device *dev)
 
 int snull_config(struct net_device *dev, struct ifmap *map)			// ifmap: Device mapping structure.
 {
-/*	int dev_num = 0;
-	if(dev == snull_devs[1])
-		dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-*/
+	printk(KERN_ALERT "%s called", __FUNCTION__);
+
 	if (dev->flags & IFF_UP) /* can't act on a running interface */
 		return -EBUSY;
 
@@ -436,12 +416,9 @@ int snull_header(struct sk_buff *skb, struct net_device *dev,
                 unsigned short type, const void *daddr, const void *saddr,
                 unsigned len)
 {
-	int dev_num = 0;
-/*	if(dev == snull_devs[1])
-		dev_num = 1;
-*/	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,ETH_HLEN);	// creating space for ether_header
+
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
 
 	eth->h_proto = htons(type);				// converts the unsigned short integer 'hostshort' from host byte order to network byte order.
 	
@@ -460,18 +437,15 @@ static const struct header_ops snull_header_ops = {			// To control snull_header
 
 void snull_init(struct net_device *dev)
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 0;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	struct snull_priv *priv;
+
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
 
 	priv = netdev_priv(dev);
 	memset(priv, 0, sizeof(struct snull_priv));
 	spin_lock_init(&priv->lock);
 	priv->dev = dev;				// Set the dev field, so we would be able to get dev through priv
-	snull_rx_ints(dev, 1);  	/* enable receive interrupts */		// from ldd3
+	// snull_rx_ints(dev, 1);  	/* enable receive interrupts */		// from ldd3
 
 	ether_setup(dev); /* assign some of the fields */
 
@@ -491,10 +465,10 @@ void mysnull_cleanup(void);
 
 int mysnull_init_module(void)
 {
+	int result, i = 0, ret = -ENOMEM;
 
 	printk(KERN_ALERT "%s called###", __FUNCTION__);
 
-	int result, i = 0, ret = -ENOMEM;
 	snull_interrupt = snull_regular_interrupt;
 
 	snull_devs[0] = alloc_netdev(sizeof(struct snull_priv), "sn%d", NET_NAME_UNKNOWN, snull_init);
@@ -517,14 +491,11 @@ int mysnull_init_module(void)
 
 void snull_teardown_pool(struct net_device *dev)
 {
-	int dev_num = 0;
-	// if(dev == snull_devs[1])
-	// 	dev_num = 1;
-	printk(KERN_ALERT "%s called by sn%d", __FUNCTION__, dev_num);
-
 	struct snull_priv *priv = netdev_priv(dev);
 	struct snull_packet *pkt;
     
+	printk(KERN_ALERT "%s called by sn0", __FUNCTION__);
+
 	while ((pkt = priv->ppool)) {		// Free all the packets from ppool (packet pool) of dev
 		priv->ppool = pkt->next;
 		kfree (pkt);
@@ -533,9 +504,9 @@ void snull_teardown_pool(struct net_device *dev)
 
 void mysnull_cleanup(void)
 {
+	int i = 0;
 	printk(KERN_ALERT "%s called###", __FUNCTION__);
 
-	int i = 0;
 	// for (i = 0; i < 2; i++) {
 		if (snull_devs[i]) {
 			unregister_netdev(snull_devs[i]);		// removes the interface from the system
